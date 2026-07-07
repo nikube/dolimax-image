@@ -13,6 +13,11 @@ COPY overlay/install/step4.php                /var/www/html/install/step4.php
 COPY overlay/install/step5.php                /var/www/html/install/step5.php
 COPY overlay/langs/en_US/install.lang         /var/www/html/langs/en_US/install.lang
 
+# Entrypoint wrapper: DOLI_INIT_DEMO_REALISTIC=1 runs the realistic demo
+# generator once, right after the auto-install completes (lock file in the
+# documents volume prevents re-runs).
+COPY docker-init-demo.sh /usr/local/bin/docker-init-demo.sh
+
 # Keep ownership consistent with the base image (www-data uid/gid 33).
 USER root
 RUN chown www-data:www-data \
@@ -20,4 +25,9 @@ RUN chown www-data:www-data \
       /var/www/html/install/install.forced.sample.php \
       /var/www/html/install/step4.php \
       /var/www/html/install/step5.php \
-      /var/www/html/langs/en_US/install.lang
+      /var/www/html/langs/en_US/install.lang \
+    && chmod +x /usr/local/bin/docker-init-demo.sh
+
+ENTRYPOINT ["docker-init-demo.sh"]
+# Overriding ENTRYPOINT resets CMD — restore the base image's.
+CMD ["apache2-foreground"]

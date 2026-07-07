@@ -27,15 +27,43 @@ if (realpath(__FILE__) === realpath($_SERVER['SCRIPT_FILENAME'] ?? '')) {
 		require __DIR__.'/../master.inc.php';
 	}
 
-	$ret = $user->fetch('', 'admin');
-	if (!($ret > 0)) {
-		print 'A user with login "admin" and all permissions must exist to use this script.'."\n";
-		exit(1);
-	}
-	$user->loadRights();
+	// Login can be passed as argv[1], falls back to DOLI_ADMIN_LOGIN (docker image), then 'admin'
+	$cliLogin = !empty($argv[1]) ? $argv[1] : (getenv('DOLI_ADMIN_LOGIN') ?: 'admin');
 
 	@set_time_limit(0);
 	print "***** generate-demo.php (".DOL_VERSION.") *****\n";
+
+	// Activate the business modules required by the generator (same list as
+	// step5.php) — on a clean install none of them are enabled and the
+	// generator would silently create nothing.
+	require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
+	$demoModules = array(
+		'modSociete', 'modProduct', 'modService', 'modBanque', 'modStock',
+		'modPropale', 'modCommande', 'modFacture', 'modFournisseur',
+		'modProjet', 'modCategorie', 'modExpedition', 'modContrat',
+		'modFicheinter', 'modTicket', 'modExpenseReport', 'modHoliday',
+		'modDon', 'modAdherent', 'modBom', 'modMrp', 'modRecruitment',
+		'modSalaries', 'modHRM', 'modKnowledgeManagement',
+		'modPartnership', 'modSupplierProposal', 'modReception',
+		'modAccounting', 'modAgenda'
+	);
+	foreach ($demoModules as $demoMod) {
+		dol_include_once('/core/modules/'.$demoMod.'.class.php');
+		$res = activateModule($demoMod, 1);
+		if (!empty($res['errors'])) {
+			print 'WARNING: failed to activate '.$demoMod.' ('.implode(', ', $res['errors']).")\n";
+		}
+		$conf->setValues($db);
+	}
+	$conf->setValues($db);
+
+	// Fetch the user after module activation so loadRights() sees all modules
+	$ret = $user->fetch('', $cliLogin);
+	if (!($ret > 0)) {
+		print 'A user with login "'.$cliLogin.'" and all permissions must exist to use this script.'."\n";
+		exit(1);
+	}
+	$user->loadRights();
 
 	$result = generateDemoData($db, $user, $langs);
 	if ($result < 0) {
