@@ -1,0 +1,38 @@
+# Dolibarr v24 (develop) from nikube/dolibarr@nikubepack — develop kept in
+# sync with upstream + feature/demo-data-installer + feature/multiselect-list-filters
+# — with the DMM module pre-bundled.
+#
+# The build context must contain the sources (the GitHub Actions workflow
+# clones them; for a local build do the same):
+#   git clone --depth 1 -b nikubepack https://github.com/nikube/dolibarr.git src/dolibarr
+#   git clone --depth 1 https://github.com/nikube/DMM.git src/DMM
+#
+# The official image's docker-run.sh is version-agnostic (it installs the
+# schema found in /var/www/html/install/mysql), so we reuse the base image
+# for PHP/Apache/entrypoint machinery and swap the whole application tree.
+FROM dolibarr/dolibarr:latest
+
+USER root
+RUN rm -rf /var/www/html
+
+# Full v24 application tree from the nikubepack branch
+COPY --chown=www-data:www-data src/dolibarr/htdocs/ /var/www/html/
+# Version scripts (cron, emailing…) — docker-init.php from the base survives
+# because the branch has no file with that name.
+COPY --chown=www-data:www-data src/dolibarr/scripts/ /var/www/scripts/
+
+# Custom modules seeded into the custom volume at boot by docker-init-demo.sh
+COPY --chown=www-data:www-data src/DMM/dolimodulemanager/ /opt/extra-custom/dolimodulemanager/
+
+# CLI helper to activate modules (DOLI_ACTIVATE_MODULES) + entrypoint wrapper
+COPY --chown=www-data:www-data activate-modules.php /var/www/html/install/activate-modules.php
+COPY docker-init-demo.sh /usr/local/bin/docker-init-demo.sh
+RUN chmod +x /usr/local/bin/docker-init-demo.sh
+
+# Used by docker-run.sh for MAIN_VERSION_LAST_INSTALL — keep in sync with
+# htdocs/version.inc.php on the branch.
+ENV DOLI_VERSION=24.0.0-beta
+
+ENTRYPOINT ["docker-init-demo.sh"]
+# Overriding ENTRYPOINT resets CMD — restore the base image's.
+CMD ["apache2-foreground"]

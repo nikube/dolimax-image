@@ -8,6 +8,7 @@ FROM dolibarr/dolibarr:23.0.3
 
 # Installer pages + demo generator
 COPY overlay/install/generate-demo.php        /var/www/html/install/generate-demo.php
+COPY activate-modules.php                     /var/www/html/install/activate-modules.php
 COPY overlay/install/install.forced.sample.php /var/www/html/install/install.forced.sample.php
 COPY overlay/install/step4.php                /var/www/html/install/step4.php
 COPY overlay/install/step5.php                /var/www/html/install/step5.php
@@ -22,6 +23,7 @@ COPY docker-init-demo.sh /usr/local/bin/docker-init-demo.sh
 USER root
 RUN chown www-data:www-data \
       /var/www/html/install/generate-demo.php \
+      /var/www/html/install/activate-modules.php \
       /var/www/html/install/install.forced.sample.php \
       /var/www/html/install/step4.php \
       /var/www/html/install/step5.php \
