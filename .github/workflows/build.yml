@@ -1,0 +1,39 @@
+name: Build & push dolibarr-demo image
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract Dolibarr version from Dockerfile FROM tag
+        id: version
+        run: echo "tag=$(grep -m1 '^FROM' Dockerfile | cut -d: -f2)" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/nikube/dolibarr-demo:${{ steps.version.outputs.tag }}
+            ghcr.io/nikube/dolibarr-demo:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/nikube/dolibarr-demo-image
+            org.opencontainers.image.description=Dolibarr ${{ steps.version.outputs.tag }} + realistic demo-data installer overlay
