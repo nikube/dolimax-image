@@ -2691,6 +2691,323 @@ function generateDemoData($db, $user, $langs)
 		}
 	}
 
+	// ========================================================================
+	// Phase 31: CRM prospection dataset
+	// Prospects with tags (activity domain / prospection area), a realistic
+	// agenda pipeline (done calls/meetings + planned and overdue follow-ups)
+	// and project opportunities across every stage of the funnel.
+	// ========================================================================
+	if (isModEnabled('societe')) {
+		_demoLog("Phase 31: CRM prospection dataset");
+		require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
+		require_once DOL_DOCUMENT_ROOT.'/contact/class/contact.class.php';
+
+		// 31a. Two customer-tag trees: activity domains and prospection areas
+		$catDomaineChildIds = array();
+		$catZoneChildIds = array();
+		if (isModEnabled('category')) {
+			require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
+
+			$catDomaineParent = new Categorie($db);
+			$catDomaineParent->label = "Domaines d'activite";
+			$catDomaineParent->description = 'Secteur d activite des clients et prospects';
+			$catDomaineParent->type = Categorie::TYPE_CUSTOMER;
+			if ($catDomaineParent->create($user) <= 0) {
+				// A category with a colliding label already exists (collation is accent-insensitive): reuse it
+				$catDomaineParent->fetch(0, $catDomaineParent->label, Categorie::TYPE_CUSTOMER);
+			}
+
+			foreach (array('Hotellerie', 'Restauration', 'Collectivites', 'Tertiaire & coworking', 'Commerce', 'Architectes & decorateurs') as $lbl) {
+				$c = new Categorie($db);
+				$c->label = $lbl;
+				$c->type = Categorie::TYPE_CUSTOMER;
+				$c->fk_parent = $catDomaineParent->id > 0 ? $catDomaineParent->id : 0;
+				if ($c->create($user) <= 0) {
+					$c->fetch(0, $lbl, Categorie::TYPE_CUSTOMER);
+				}
+				if ($c->id > 0) {
+					$catDomaineChildIds[] = $c->id;
+				}
+			}
+
+			$catZoneParent = new Categorie($db);
+			$catZoneParent->label = 'Zones de prospection';
+			$catZoneParent->description = 'Zone geographique de prospection';
+			$catZoneParent->type = Categorie::TYPE_CUSTOMER;
+			if ($catZoneParent->create($user) <= 0) {
+				$catZoneParent->fetch(0, $catZoneParent->label, Categorie::TYPE_CUSTOMER);
+			}
+
+			foreach (array('Ile-de-France', 'Grand Ouest', 'Sud-Est', 'Nord & Est', 'International') as $lbl) {
+				$c = new Categorie($db);
+				$c->label = $lbl;
+				$c->type = Categorie::TYPE_CUSTOMER;
+				$c->fk_parent = $catZoneParent->id > 0 ? $catZoneParent->id : 0;
+				if ($c->create($user) <= 0) {
+					$c->fetch(0, $lbl, Categorie::TYPE_CUSTOMER);
+				}
+				if ($c->id > 0) {
+					$catZoneChildIds[] = $c->id;
+				}
+			}
+
+			// Tag the existing demo customers too, so tag-based screens are populated
+			$existingCustomerTags = array(
+				array($socClient1Id, 0, 2), // hotel — Hotellerie / Sud-Est
+				array($socClient2Id, 5, 2), // architects — Architectes / Sud-Est
+				array($socClient3Id, 1, 0), // restaurant — Restauration / IdF
+				array($socClient4Id, 3, 0), // coworking — Tertiaire / IdF
+				array($socClient5Id, 2, 0), // town hall — Collectivites / IdF
+			);
+			foreach ($existingCustomerTags as $t) {
+				if ($t[0] > 0 && !empty($catDomaineChildIds[$t[1]]) && !empty($catZoneChildIds[$t[2]])) {
+					$socTmp = new Societe($db);
+					if ($socTmp->fetch($t[0]) > 0) {
+						$c = new Categorie($db);
+						if ($c->fetch($catDomaineChildIds[$t[1]]) > 0) {
+							$c->add_type($socTmp, 'customer');
+						}
+						$c = new Categorie($db);
+						if ($c->fetch($catZoneChildIds[$t[2]]) > 0) {
+							$c->add_type($socTmp, 'customer');
+						}
+					}
+				}
+			}
+		}
+
+		// 31b. Lead statuses for opportunities
+		$leadStatusIds = array();
+		if (isModEnabled('project')) {
+			require_once DOL_DOCUMENT_ROOT.'/projet/class/project.class.php';
+			dolibarr_set_const($db, 'PROJECT_USE_OPPORTUNITIES', '1', 'chaine', 0, '', $conf->entity);
+			foreach (array('PROSP', 'QUAL', 'PROPO', 'NEGO', 'WON', 'LOST') as $code) {
+				$leadStatusIds[$code] = _demoGetDictId($db, 'c_lead_status', 'rowid', "code = '".$db->escape($code)."'");
+			}
+		}
+		if (isModEnabled('agenda')) {
+			require_once DOL_DOCUMENT_ROOT.'/comm/action/class/actioncomm.class.php';
+			// Email is a common prospection channel but ships disabled in the dictionary
+			$db->query("UPDATE ".MAIN_DB_PREFIX."c_actioncomm SET active = 1 WHERE code = 'AC_EMAIL'");
+		}
+		$eventOwners = array_values(array_filter(array($user1Id, $user2Id, $user3Id, $user->id)));
+		if (empty($eventOwners)) {
+			$eventOwners = array($user->id);
+		}
+
+		// 31c. Prospects: tags, contacts, prospection history, follow-ups, opportunities.
+		// done: days ago / type / label / location / note. todo: days from now (negative = overdue).
+		// opp: stage code / amount / percent / 'open' or 'closed'.
+		$prospectsData = array(
+			array('name' => 'Hotel des Remparts', 'zip' => '35400', 'town' => 'Saint-Malo', 'dom' => 0, 'zone' => 1,
+				'contact' => array('Le Goff', 'Maela', 'Directrice'),
+				'done' => array(array(75, 'AC_RDV', 'Rencontre salon EquipHotel', 'Paris - Porte de Versailles', 'Renovation de 45 chambres prevue. Tres interessee par le mobilier chene massif.')),
+				'todo' => array(array(-9, 'AC_TEL', 'Relance apres envoi du devis chambres')),
+				'opp' => array('NEGO', 65000, 60, 'open')),
+			array('name' => 'Brasserie Le Zinc', 'zip' => '59000', 'town' => 'Lille', 'dom' => 1, 'zone' => 3,
+				'contact' => array('Vandamme', 'Julien', 'Gerant'),
+				'done' => array(array(21, 'AC_TEL', 'Premier contact - agencement salle', '', 'Cherche tables et banquettes pour extension 40 couverts.')),
+				'todo' => array(array(6, 'AC_RDV', 'Visite sur place pour prise de mesures')),
+				'opp' => array('QUAL', 18000, 20, 'open')),
+			array('name' => 'Mairie de Cassis', 'zip' => '13260', 'town' => 'Cassis', 'dom' => 2, 'zone' => 2,
+				'contact' => array('Blanc', 'Nathalie', 'Responsable des services techniques'),
+				'done' => array(
+					array(60, 'AC_EMAIL', 'Envoi dossier de presentation', '', 'Appel d offres mobilier mediatheque prevu au prochain trimestre.'),
+					array(30, 'AC_RDV', 'Presentation en mairie', 'Cassis', 'Presentation du catalogue collectivites devant la commission.')),
+				'todo' => array(array(12, 'AC_EMAIL', 'Envoyer la reponse a l appel d offres mediatheque')),
+				'opp' => array('PROPO', 42000, 40, 'open')),
+			array('name' => 'Coworking La Ruche', 'zip' => '44000', 'town' => 'Nantes', 'dom' => 3, 'zone' => 1,
+				'contact' => array('Perrot', 'Antoine', 'Fondateur'),
+				'done' => array(array(14, 'AC_TEL', 'Qualification besoin - ouverture 2e site', '', '60 postes de travail a equiper. Budget serre, decision rapide.')),
+				'todo' => array(array(-4, 'AC_TEL', 'Rappeler pour valider la visite du showroom')),
+				'opp' => array('PROSP', 25000, 5, 'open')),
+			array('name' => 'Boutique Maison Perle', 'zip' => '75003', 'town' => 'Paris', 'dom' => 4, 'zone' => 0,
+				'contact' => array('Nguyen', 'Claire', 'Proprietaire'),
+				'done' => array(array(45, 'AC_RDV', 'Vu en boutique lors d une livraison voisine', 'Paris 3e', 'Interessee par un comptoir sur mesure et des etageres murales.')),
+				'todo' => array(),
+				'opp' => null),
+			array('name' => 'Atelier d architecture Vasseur', 'zip' => '69001', 'town' => 'Lyon', 'dom' => 5, 'zone' => 2,
+				'contact' => array('Vasseur', 'Helene', 'Architecte associee'),
+				'done' => array(
+					array(90, 'AC_TEL', 'Premier contact - prescripteur potentiel', '', 'Prescrit du mobilier massif sur ses projets hoteliers.'),
+					array(28, 'AC_EMAIL', 'Envoi book references hotellerie', '', 'A transmis nos references a deux clients hoteliers.')),
+				'todo' => array(array(20, 'AC_RDV', 'Dejeuner partenariat prescripteur')),
+				'opp' => array('QUAL', 30000, 20, 'open')),
+			array('name' => 'Chateau de Kerlann', 'zip' => '56000', 'town' => 'Vannes', 'dom' => 0, 'zone' => 1,
+				'contact' => array('Jaouen', 'Pierre', 'Proprietaire'),
+				'done' => array(
+					array(120, 'AC_RDV', 'Visite du chateau - chambres d hotes', 'Vannes', '12 chambres d hotes haut de gamme a meubler.'),
+					array(40, 'AC_TEL', 'Validation devis mobilier 12 chambres', '', 'Devis accepte a l oral, signature en cours.')),
+				'todo' => array(array(15, 'AC_RDV', 'Reunion de lancement chantier')),
+				'opp' => array('WON', 38000, 100, 'open')),
+			array('name' => 'Groupe Resto Oceane', 'zip' => '33000', 'town' => 'Bordeaux', 'dom' => 1, 'zone' => 1,
+				'contact' => array('Costa', 'Marina', 'Directrice du developpement'),
+				'done' => array(array(50, 'AC_TEL', 'Contact groupe - 3 restaurants a equiper', '', 'Groupe en expansion, 3 ouvertures prevues cette annee.')),
+				'todo' => array(array(-15, 'AC_EMAIL', 'Relancer avec proposition cadre multi-sites')),
+				'opp' => array('NEGO', 54000, 60, 'open')),
+			array('name' => 'Communaute de communes du Vexin', 'zip' => '95300', 'town' => 'Pontoise', 'dom' => 2, 'zone' => 0,
+				'contact' => array('Marchand', 'Denis', 'Directeur general des services'),
+				'done' => array(array(35, 'AC_EMAIL', 'Reponse a consultation mobilier scolaire', '', 'Consultation pour 4 ecoles du territoire.')),
+				'todo' => array(array(25, 'AC_TEL', 'Suivre le resultat de la consultation')),
+				'opp' => null),
+			array('name' => 'Espace sante Les Tilleuls', 'zip' => '67000', 'town' => 'Strasbourg', 'dom' => 3, 'zone' => 3,
+				'contact' => array('Weber', 'Sarah', 'Coordinatrice'),
+				'done' => array(array(100, 'AC_RDV', 'Presentation amenagement salle d attente', 'Strasbourg', 'Projet finalement confie a un concurrent local moins cher.')),
+				'todo' => array(),
+				'opp' => array('LOST', 22000, 0, 'closed')),
+			array('name' => 'Librairie du Port', 'zip' => '13002', 'town' => 'Marseille', 'dom' => 4, 'zone' => 2,
+				'contact' => array('Fabre', 'Lucas', 'Gerant'),
+				'done' => array(array(18, 'AC_TEL', 'Demande de devis rayonnages', '', 'Rayonnages bois pour 80 m2 de surface de vente.')),
+				'todo' => array(array(8, 'AC_EMAIL', 'Envoyer devis rayonnages et plan 3D')),
+				'opp' => null),
+			array('name' => 'Studio Deco Interieurs', 'zip' => '75011', 'town' => 'Paris', 'dom' => 5, 'zone' => 0,
+				'contact' => array('Aubert', 'Camille', 'Decoratrice'),
+				'done' => array(array(55, 'AC_RDV', 'Rencontre salon Maison & Objet', 'Villepinte', 'Cherche un fabricant partenaire pour ses projets residentiels haut de gamme.')),
+				'todo' => array(array(10, 'AC_RDV', 'Presentation atelier et gamme sur mesure')),
+				'opp' => array('PROPO', 47000, 40, 'open')),
+			array('name' => 'Riad El Fassia', 'zip' => '40000', 'town' => 'Marrakech', 'dom' => 0, 'zone' => 4,
+				'contact' => array('Bennani', 'Youssef', 'Directeur'),
+				'done' => array(
+					array(70, 'AC_EMAIL', 'Contact via le site web', '', 'Renovation complete d un riad de 9 suites.'),
+					array(42, 'AC_RDV', 'Visio de presentation du projet', 'Visioconference', 'Projet ambitieux, transport a chiffrer.')),
+				'todo' => array(array(-20, 'AC_EMAIL', 'Relancer avec le chiffrage transport international')),
+				'opp' => array('QUAL', 75000, 20, 'open')),
+			array('name' => 'Cantine scolaire Grand Sud', 'zip' => '31000', 'town' => 'Toulouse', 'dom' => 2, 'zone' => 2,
+				'contact' => array('Roussel', 'Emma', 'Gestionnaire'),
+				'done' => array(
+					array(200, 'AC_TEL', 'Premier contact marche cantines', '', 'Marche de renouvellement des tables de cantine.'),
+					array(150, 'AC_RDV', 'Soutenance offre', 'Toulouse', 'Offre retenue. Livraison effectuee pendant les vacances.')),
+				'todo' => array(),
+				'opp' => array('WON', 29000, 100, 'closed')),
+		);
+
+		$oppNum = 0;
+		$nbProspects = 0;
+		foreach ($prospectsData as $i => $pd) {
+			$soc = new Societe($db);
+			$soc->name = $pd['name'];
+			$soc->client = 2; // prospect
+			$soc->fournisseur = 0;
+			$soc->zip = $pd['zip'];
+			$soc->town = $pd['town'];
+			$soc->country_id = 1;
+			$soc->country_code = 'FR';
+			$soc->code_client = -1;
+			$socid = $soc->create($user);
+			if ($socid <= 0) {
+				_demoLog("  Warning: prospect ".$pd['name'].": ".$soc->error);
+				continue;
+			}
+			$nbProspects++;
+
+			// Tags
+			if (!empty($catDomaineChildIds[$pd['dom']])) {
+				$c = new Categorie($db);
+				if ($c->fetch($catDomaineChildIds[$pd['dom']]) > 0) {
+					$c->add_type($soc, 'customer');
+				}
+			}
+			if (!empty($catZoneChildIds[$pd['zone']])) {
+				$c = new Categorie($db);
+				if ($c->fetch($catZoneChildIds[$pd['zone']]) > 0) {
+					$c->add_type($soc, 'customer');
+				}
+			}
+
+			// Contact
+			$contact = new Contact($db);
+			$contact->socid = $socid;
+			$contact->lastname = $pd['contact'][0];
+			$contact->firstname = $pd['contact'][1];
+			$contact->poste = $pd['contact'][2];
+			$contact->statut = 1;
+			$contact->create($user);
+
+			// Prospection history (done) and follow-ups (todo, negative = overdue)
+			if (isModEnabled('agenda')) {
+				foreach ($pd['done'] as $j => $evt) {
+					$action = new ActionComm($db);
+					$action->label = $evt[2];
+					$action->type_code = $evt[1];
+					$action->datep = dol_time_plus_duree($now, -(int) $evt[0], 'd');
+					$action->datef = $action->datep;
+					$action->location = $evt[3];
+					$action->note_private = $evt[4];
+					$action->socid = $socid;
+					$action->percentage = 100;
+					$action->userownerid = $eventOwners[($i + $j) % count($eventOwners)];
+					$action->fulldayevent = 0;
+					$action->create($user);
+				}
+				foreach ($pd['todo'] as $j => $evt) {
+					$action = new ActionComm($db);
+					$action->label = $evt[2];
+					$action->type_code = $evt[1];
+					$action->datep = dol_time_plus_duree($now, (int) $evt[0], 'd');
+					$action->datef = $action->datep;
+					$action->socid = $socid;
+					$action->percentage = 0;
+					$action->userownerid = $eventOwners[($i + $j) % count($eventOwners)];
+					$action->fulldayevent = 0;
+					$action->create($user);
+				}
+			}
+
+			// Opportunity
+			if (!empty($pd['opp']) && isModEnabled('project') && !empty($leadStatusIds[$pd['opp'][0]])) {
+				$oppNum++;
+				$proj = new Project($db);
+				$proj->ref = 'LEAD-'.sprintf('%02d', $oppNum);
+				$proj->title = 'Opportunite '.$pd['name'];
+				$proj->socid = $socid;
+				$proj->usage_opportunity = 1;
+				$proj->opp_status = $leadStatusIds[$pd['opp'][0]];
+				$proj->opp_amount = $pd['opp'][1];
+				$proj->opp_percent = $pd['opp'][2];
+				$proj->date_start = dol_time_plus_duree($now, -2, 'm');
+				if ($proj->create($user) > 0) {
+					$proj->setValid($user);
+					if ($pd['opp'][3] == 'closed') {
+						$proj->setClose($user);
+					}
+				} else {
+					_demoLog("  Warning: opportunity ".$proj->ref.": ".$proj->error);
+				}
+			}
+		}
+		_demoLog("  ".$nbProspects." prospects created with tags, agenda pipeline and ".$oppNum." opportunities");
+
+		// 31d. Extra customers to thicken the base
+		$extraCustomers = array(
+			array('Residence Les Glycines', '86000', 'Poitiers', array('Marty', 'Isabelle', 'Directrice')),
+			array('Le Comptoir des Halles', '34000', 'Montpellier', array('Gimenez', 'Paul', 'Gerant')),
+			array('Lycee agricole du Perche', '61400', 'Mortagne-au-Perche', array('Besnard', 'Luc', 'Intendant')),
+			array('Agence Novaterra', '35000', 'Rennes', array('Guillou', 'Anna', 'Office manager')),
+			array('Ferme auberge du Vercors', '38250', 'Villard-de-Lans', array('Ravix', 'Bruno', 'Proprietaire')),
+		);
+		foreach ($extraCustomers as $cd) {
+			$soc = new Societe($db);
+			$soc->name = $cd[0];
+			$soc->client = 1;
+			$soc->fournisseur = 0;
+			$soc->zip = $cd[1];
+			$soc->town = $cd[2];
+			$soc->country_id = 1;
+			$soc->country_code = 'FR';
+			$soc->code_client = -1;
+			$socid = $soc->create($user);
+			if ($socid > 0) {
+				$contact = new Contact($db);
+				$contact->socid = $socid;
+				$contact->lastname = $cd[3][0];
+				$contact->firstname = $cd[3][1];
+				$contact->poste = $cd[3][2];
+				$contact->statut = 1;
+				$contact->create($user);
+			}
+		}
+	}
+
 	// Check critical data was created
 	if ($socClient1Id <= 0) {
 		_demoLog("ERROR: no third parties created");
