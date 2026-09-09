@@ -7,8 +7,7 @@
 FROM dolibarr/dolibarr:latest
 
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends unzip && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /var/www/html
+RUN rm -rf /var/www/html
 
 COPY --chown=www-data:www-data src/dolibarr/htdocs/ /var/www/html/
 COPY --chown=www-data:www-data src/dolibarr/scripts/ /var/www/scripts/

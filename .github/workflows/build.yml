@@ -45,7 +45,7 @@ jobs:
           build-args: DOLI_VERSION=${{ matrix.version }}
           load: true
           tags: ${{ env.IMAGE }}:${{ matrix.version }}
-      - name: Smoke test — boot, realistic demo, module fetch + activation
+      - name: Smoke test — boot, realistic demo, DMM installs + activation
         run: |
           DOLIMAX_TAG=${{ matrix.version }} docker compose up -d
           for i in $(seq 1 120); do
@@ -56,7 +56,8 @@ jobs:
           done
           echo "$log" | grep "\[dolimax\]"
           echo "$log" | grep -q "demo data generated successfully" || { docker compose exec -T dolibarr sh -c 'tail -50 /var/www/documents/*.log'; exit 1; }
-          docker compose exec -T dolibarr sh -c 'grep -c "Activated" /var/www/documents/activate-modules.log'
+          echo "$log" | grep -q "extra modules installed" || { docker compose exec -T dolibarr sh -c 'tail -50 /var/www/documents/dmm-install.log'; exit 1; }
+          docker compose exec -T dolibarr sh -c 'cat /var/www/documents/dmm-install.log'
           docker compose down -v
       - name: Push
         uses: docker/build-push-action@v6
@@ -79,7 +80,7 @@ jobs:
       - name: Clone sources
         run: |
           git clone --depth 1 -b nikubepack https://github.com/nikube/dolibarr.git src/dolibarr
-          git clone --depth 1 https://github.com/nikube/DMM.git src/DMM
+          git clone --depth 1 -b dev https://github.com/nikube/DMM.git src/DMM
           echo "sha=$(git -C src/dolibarr rev-parse --short HEAD)" >> "$GITHUB_ENV"
       - uses: docker/login-action@v3
         with:
