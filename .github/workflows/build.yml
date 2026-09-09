@@ -1,4 +1,4 @@
-name: Build & push dolibarr-demo image
+name: Build & push dolimax
 
 on:
   push:
@@ -9,70 +9,91 @@ permissions:
   contents: read
   packages: write
 
+env:
+  IMAGE: ghcr.io/nikube/dolimax
+
 jobs:
+  # One image per official Dolibarr tag. Extra tags: major (:23) and :latest
+  # on the newest stable of the matrix.
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["21.0.4", "22.0.5", "23.0.4", "24.0.0"]
+        include:
+          - version: "24.0.0"
+            latest: true
     steps:
       - uses: actions/checkout@v4
-
-      - name: Extract Dolibarr version from Dockerfile FROM tag
-        id: version
-        run: |
-          echo "tag=$(grep -m1 '^FROM' Dockerfile | cut -d: -f2)" >> "$GITHUB_OUTPUT"
-
-      - name: Log in to ghcr.io
-        uses: docker/login-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push
+      - name: Tags
+        id: tags
+        run: |
+          v=${{ matrix.version }}
+          t="$IMAGE:$v,$IMAGE:${v%%.*}"
+          [ "${{ matrix.latest }}" = "true" ] && t="$t,$IMAGE:latest"
+          echo "tags=$t" >> "$GITHUB_OUTPUT"
+      - name: Build (local)
         uses: docker/build-push-action@v6
         with:
           context: .
+          build-args: DOLI_VERSION=${{ matrix.version }}
+          load: true
+          tags: ${{ env.IMAGE }}:${{ matrix.version }}
+      - name: Smoke test — boot, realistic demo, module fetch + activation
+        run: |
+          DOLIMAX_TAG=${{ matrix.version }} docker compose up -d
+          for i in $(seq 1 120); do
+            log=$(docker compose logs dolibarr 2>&1)
+            echo "$log" | grep -q "CRON_KEY stored" && break
+            echo "$log" | grep -q "\[dolimax\] ERROR" && { echo "$log" | tail -50; docker compose exec -T dolibarr sh -c 'tail -50 /var/www/documents/*.log'; exit 1; }
+            sleep 10
+          done
+          echo "$log" | grep "\[dolimax\]"
+          echo "$log" | grep -q "demo data generated successfully" || { docker compose exec -T dolibarr sh -c 'tail -50 /var/www/documents/*.log'; exit 1; }
+          docker compose exec -T dolibarr sh -c 'grep -c "Activated" /var/www/documents/activate-modules.log'
+          docker compose down -v
+      - name: Push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          build-args: DOLI_VERSION=${{ matrix.version }}
           push: true
-          tags: |
-            ghcr.io/nikube/dolibarr-demo:${{ steps.version.outputs.tag }}
-            ghcr.io/nikube/dolibarr-demo:latest
+          tags: ${{ steps.tags.outputs.tags }}
           labels: |
-            org.opencontainers.image.source=https://github.com/nikube/dolibarr-demo-image
-            org.opencontainers.image.description=Dolibarr ${{ steps.version.outputs.tag }} + realistic demo-data installer overlay
+            org.opencontainers.image.source=https://github.com/nikube/dolimax-image
+            org.opencontainers.image.description=Dolibarr ${{ matrix.version }} + realistic demo generator + DOLI_EXTRA_MODULES / DOLI_ACTIVATE_MODULES
 
-  # v24 develop image from nikube/dolibarr@nikubepack (+ DMM pre-bundled).
-  # Tagged :latest AND :<dolibarr short sha> — deploy the sha tag to avoid
-  # the "overwritten tag not re-pulled" trap (Coolify keeps its local copy).
-  nikubepack:
+  # :develop from nikube/dolibarr@nikubepack (+ DMM baked in), also tagged
+  # with the source short sha — deploy the sha tag to avoid the
+  # "overwritten tag not re-pulled" trap.
+  develop:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Clone sources
         run: |
           git clone --depth 1 -b nikubepack https://github.com/nikube/dolibarr.git src/dolibarr
           git clone --depth 1 https://github.com/nikube/DMM.git src/DMM
-
-      - name: Source revision
-        id: rev
-        run: |
-          echo "sha=$(git -C src/dolibarr rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Log in to ghcr.io
-        uses: docker/login-action@v3
+          echo "sha=$(git -C src/dolibarr rev-parse --short HEAD)" >> "$GITHUB_ENV"
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.nikubepack
           push: true
           tags: |
-            ghcr.io/nikube/dolibarr-nikubepack:${{ steps.rev.outputs.sha }}
-            ghcr.io/nikube/dolibarr-nikubepack:latest
+            ${{ env.IMAGE }}:develop
+            ${{ env.IMAGE }}:develop-${{ env.sha }}
           labels: |
-            org.opencontainers.image.source=https://github.com/nikube/dolibarr-demo-image
-            org.opencontainers.image.description=Dolibarr v24 develop (nikubepack branch) + DMM
+            org.opencontainers.image.source=https://github.com/nikube/dolimax-image
+            org.opencontainers.image.description=Dolibarr develop (nikubepack branch) + DMM

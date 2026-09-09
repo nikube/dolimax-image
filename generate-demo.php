@@ -2649,7 +2649,7 @@ function generateDemoData($db, $user, $langs)
 				if ($result > 0) {
 					$lineError = 0;
 					foreach ($sord1->lines as $line) {
-						if ($rec1->create_line($warehouseId, $line->id, $line->qty) <= 0) {
+						if ($rec1->addline($warehouseId, $line->id, $line->qty) <= 0) {
 							_demoLog("WARNING: reception line failed for supplier order ".$sord1->id." (line ".$line->id.") — skipping validation");
 							$lineError++;
 							break;
@@ -2677,7 +2677,7 @@ function generateDemoData($db, $user, $langs)
 				if ($result > 0) {
 					$lineError = 0;
 					foreach ($sord4->lines as $line) {
-						if ($rec2->create_line($warehouseId, $line->id, $line->qty) <= 0) {
+						if ($rec2->addline($warehouseId, $line->id, $line->qty) <= 0) {
 							_demoLog("WARNING: reception line failed for supplier order ".$sord4->id." (line ".$line->id.") — skipping validation");
 							$lineError++;
 							break;

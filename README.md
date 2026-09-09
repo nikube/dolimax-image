@@ -1,23 +1,38 @@
-# dolibarr-demo-image
+# dolimax
 
-Official `dolibarr/dolibarr` image + the 5-file overlay from
-[nikube/dolibarr@feature/demo-data-installer](https://github.com/nikube/dolibarr/tree/feature/demo-data-installer):
-an optional "Load demo data" step in the installer plus the
-`install/generate-demo.php` CLI generator (realistic sample company).
+`ghcr.io/nikube/dolimax:<tag>` — the official `dolibarr/dolibarr` image, any version,
+made configurable from the environment. One image, three independent axes:
 
-Published automatically to **`ghcr.io/nikube/dolibarr-demo`** by GitHub Actions
-on every push to `main`.
+| Axis | Where | How |
+|---|---|---|
+| Dolibarr version | image tag | `21.0.4`, `22.0.5`, `23.0.4`, `24.0.0`, majors (`23`), `latest`, `develop` |
+| Realistic demo company | runtime | `DOLI_INIT_DEMO_REALISTIC=1` (once, lock file in the documents volume) |
+| Custom modules | runtime | `DOLI_EXTRA_MODULES=<zip url>,...` fetched once into `custom/`, `DOLI_ACTIVATE_MODULES=modX,modY` activated on every boot |
 
-## Bump the Dolibarr version
+Plus `DOLI_CRON_KEY` stored as `CRON_KEY` (the official entrypoint writes it before
+modCron exists, so the row is missing on a fresh install).
 
-Edit the `FROM dolibarr/dolibarr:<tag>` line in the `Dockerfile`, commit, push.
-The workflow tags the image with the same `<tag>` and `latest`.
-
-## Local build
+Everything else is the official image: same `DOLI_*` variables, same volumes
+(`/var/www/documents`, `/var/www/html/custom`), same entrypoint underneath.
 
 ```bash
-docker build -t dolibarr-demo:23.0.3 .
+DOLIMAX_TAG=22.0.5 docker compose up -d      # see compose.yml for the full example
+docker compose logs -f dolibarr | grep dolimax
 ```
 
-Used by [dolitest](https://github.com/nikube/dolitest) and the Coolify test
-instance.
+Logs of the one-shot steps: `documents/generate-demo.log`, `documents/activate-modules.log`.
+
+## Build
+
+`Dockerfile` overlays three CLI scripts (`install/generate-demo.php` from
+[nikube/dolibarr@feature/demo-data-installer](https://github.com/nikube/dolibarr/tree/feature/demo-data-installer),
+`activate-modules.php`, `set-cron-key.php`) and the entrypoint wrapper on
+`dolibarr/dolibarr:${DOLI_VERSION}`. No installer UI patch, so it builds on any tag:
+
+```bash
+docker build --build-arg DOLI_VERSION=22.0.5 -t dolimax:22.0.5 .
+```
+
+The workflow builds the matrix, boots each image with demo + DMM as a smoke test,
+then pushes. Add a version: one entry in the matrix. `:develop` comes from
+`Dockerfile.nikubepack` (full tree of `nikube/dolibarr@nikubepack` + DMM baked in).

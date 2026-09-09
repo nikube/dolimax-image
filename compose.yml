@@ -1,0 +1,43 @@
+# Example stack — also what the CI smoke test boots.
+#   DOLIMAX_TAG=22.0.5 docker compose up -d
+services:
+  dolibarr:
+    image: ghcr.io/nikube/dolimax:${DOLIMAX_TAG:-latest}
+    ports: ["${DOLIMAX_PORT:-8092}:80"]
+    environment:
+      DOLI_DB_HOST: mariadb
+      DOLI_DB_NAME: dolibarr
+      DOLI_DB_USER: dolibarr
+      DOLI_DB_PASSWORD: dolibarr
+      DOLI_ADMIN_LOGIN: admin
+      DOLI_ADMIN_PASSWORD: admin
+      DOLI_URL_ROOT: http://localhost:${DOLIMAX_PORT:-8092}
+      DOLI_INSTANCE_UNIQUE_ID: dolimax-${DOLIMAX_TAG:-latest}
+      DOLI_CRON_KEY: dolimax-cron-key
+      DOLI_INIT_DEMO_REALISTIC: "1"
+      DOLI_EXTRA_MODULES: https://github.com/nikube/DMM/releases/download/v2.1.0/module_dolimodulemanager-2.1.0.zip
+      DOLI_ACTIVATE_MODULES: modCron,modDoliModuleManager
+    volumes:
+      - documents:/var/www/documents
+      - custom:/var/www/html/custom
+    depends_on:
+      mariadb:
+        condition: service_healthy
+  mariadb:
+    image: mariadb:11
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: dolibarr
+      MARIADB_USER: dolibarr
+      MARIADB_PASSWORD: dolibarr
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - db:/var/lib/mysql
+volumes:
+  documents:
+  custom:
+  db:

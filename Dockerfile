@@ -1,35 +1,23 @@
-# Dolibarr 23.x with nikube's feature/demo-data-installer overlay.
-# Adds an optional "Load demo data" step (realistic sample company) to the
-# installer. Only the 5 files changed by that branch are overlaid on top of
-# the official image — no full rebuild needed.
-# Bump the tag below and push to main: the GitHub Actions workflow rebuilds
-# and publishes ghcr.io/nikube/dolibarr-demo:<tag> automatically.
-FROM dolibarr/dolibarr:23.0.3
+# dolimax — official dolibarr/dolibarr image, any version, made configurable:
+#   DOLI_INIT_DEMO_REALISTIC=1          realistic demo company on first boot
+#   DOLI_EXTRA_MODULES=<zip url>,...    custom modules fetched into custom/ on first boot
+#   DOLI_ACTIVATE_MODULES=modX,modY     modules activated on every boot (idempotent)
+#   DOLI_CRON_KEY=...                   stored as CRON_KEY once modCron exists
+# Only CLI scripts are overlaid (no installer UI patch), so the same
+# Dockerfile builds against every official tag: docker build --build-arg DOLI_VERSION=22.0.5 .
+ARG DOLI_VERSION=23.0.4
+FROM dolibarr/dolibarr:${DOLI_VERSION}
 
-# Installer pages + demo generator
-COPY overlay/install/generate-demo.php        /var/www/html/install/generate-demo.php
-COPY activate-modules.php                     /var/www/html/install/activate-modules.php
-COPY overlay/install/install.forced.sample.php /var/www/html/install/install.forced.sample.php
-COPY overlay/install/step4.php                /var/www/html/install/step4.php
-COPY overlay/install/step5.php                /var/www/html/install/step5.php
-COPY overlay/langs/en_US/install.lang         /var/www/html/langs/en_US/install.lang
-
-# Entrypoint wrapper: DOLI_INIT_DEMO_REALISTIC=1 runs the realistic demo
-# generator once, right after the auto-install completes (lock file in the
-# documents volume prevents re-runs).
-COPY docker-init-demo.sh /usr/local/bin/docker-init-demo.sh
-
-# Keep ownership consistent with the base image (www-data uid/gid 33).
 USER root
-RUN chown www-data:www-data \
-      /var/www/html/install/generate-demo.php \
-      /var/www/html/install/activate-modules.php \
-      /var/www/html/install/install.forced.sample.php \
-      /var/www/html/install/step4.php \
-      /var/www/html/install/step5.php \
-      /var/www/html/langs/en_US/install.lang \
-    && chmod +x /usr/local/bin/docker-init-demo.sh
+RUN apt-get update && apt-get install -y --no-install-recommends unzip && rm -rf /var/lib/apt/lists/*
 
-ENTRYPOINT ["docker-init-demo.sh"]
+COPY --chown=www-data:www-data generate-demo.php activate-modules.php set-cron-key.php /var/www/html/install/
+COPY docker-dolimax.sh /usr/local/bin/docker-dolimax.sh
+RUN chmod +x /usr/local/bin/docker-dolimax.sh
+
+# Generic demo dump of the official image is off: the realistic generator replaces it.
+ENV DOLI_INIT_DEMO=0
+
+ENTRYPOINT ["docker-dolimax.sh"]
 # Overriding ENTRYPOINT resets CMD — restore the base image's.
 CMD ["apache2-foreground"]
