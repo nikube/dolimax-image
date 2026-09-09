@@ -16,7 +16,7 @@ services:
       DOLI_CRON_KEY: dolimax-cron-key
       DOLI_INIT_DEMO_REALISTIC: "1"
       # DMM specs: hub name, owner/repo, git URL, spec@ref
-      DOLI_EXTRA_MODULES: multifilter,nikube/adminer4dolibarr@v0.4
+      DOLI_EXTRA_MODULES: multifilter,nikube/adminer4dolibarr
       DOLI_ACTIVATE_MODULES: modCron
     volumes:
       - documents:/var/www/documents
