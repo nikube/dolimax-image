@@ -5,6 +5,8 @@
 #   DOLI_ACTIVATE_MODULES=modX,modY     core/custom modules activated on every boot
 #   DOLI_GITHUB_TOKEN=...               token handed to DMM for private repos
 #   DOLI_CRON_KEY=...                   stored as CRON_KEY once modCron exists
+#   DOLI_PHP_INI="k = v\nk = v"          extra php.ini lines (the official PHP_INI_* cover
+#                                       memory/upload/post/timezone/allow_url_fopen only)
 # DMM (DoliModuleManager) is baked in and seeded into custom/ on first boot.
 # Only CLI scripts are overlaid (no installer UI patch), so the same Dockerfile
 # builds against every official tag: docker build --build-arg DOLI_VERSION=22.0.5 .
@@ -15,6 +17,13 @@ FROM dolibarr/dolibarr:${DOLI_VERSION}
 ARG DMM_REF=dev
 
 USER root
+# ftp: Dolibarr FTP module + EDI/backup flows; bcmath: several modules assume it.
+RUN docker-php-ext-install ftp bcmath
+
+# Private ERP: nothing to index. Refuse the usual AI/SEO crawlers and tell the rest not to index.
+COPY block-bots.conf /etc/apache2/conf-enabled/block-bots.conf
+RUN a2enmod headers
+
 RUN set -eux; mkdir -p /opt/extra-custom /tmp/dmm; \
     curl -fsSL "https://codeload.github.com/nikube/DMM/tar.gz/${DMM_REF}" | tar -xz -C /tmp/dmm; \
     mv /tmp/dmm/DMM-*/dolimodulemanager /opt/extra-custom/dolimodulemanager; \

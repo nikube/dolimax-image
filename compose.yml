@@ -14,6 +14,9 @@ services:
       DOLI_URL_ROOT: http://localhost:${DOLIMAX_PORT:-8092}
       DOLI_INSTANCE_UNIQUE_ID: dolimax-${DOLIMAX_TAG:-latest}
       DOLI_CRON_KEY: dolimax-cron-key
+      # Official image: PHP_INI_MEMORY_LIMIT, PHP_INI_UPLOAD_MAX_FILESIZE, PHP_INI_POST_MAX_SIZE…
+      # Anything else goes here, one php.ini line per \n.
+      DOLI_PHP_INI: "max_execution_time = 300\nmax_input_vars = 3000\nmax_file_uploads = 50"
       DOLI_INIT_DEMO_REALISTIC: "1"
       # DMM specs: hub name, owner/repo, git URL, spec@ref
       DOLI_EXTRA_MODULES: multifilter,nikube/adminer4dolibarr

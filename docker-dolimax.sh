@@ -12,6 +12,11 @@ mkdir -p "$CUSTOM"
 chmod u+w "$CUSTOM"
 chown www-data:www-data "$CUSTOM"
 
+# Extra php.ini lines, on top of the PHP_INI_* the official entrypoint handles.
+if [ -n "$DOLI_PHP_INI" ]; then
+	printf '%b\n' "$DOLI_PHP_INI" > "$PHP_INI_DIR/conf.d/99-dolimax.ini"
+fi
+
 # Baked-in modules (DMM, and whatever an image on top adds to /opt/extra-custom).
 # Never overwrite an existing dir, so a copy updated through DMM survives restarts.
 for m in /opt/extra-custom/*/; do

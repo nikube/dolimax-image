@@ -17,7 +17,12 @@ the latest release compatible with the running Dolibarr is picked, so a module w
 private repos. Modules already at the wanted version are only re-activated.
 
 Plus `DOLI_CRON_KEY` stored as `CRON_KEY` (the official entrypoint writes it before
-modCron exists, so the row is missing on a fresh install).
+modCron exists, so the row is missing on a fresh install), and `DOLI_PHP_INI` for
+php.ini lines the official `PHP_INI_*` variables do not cover (`"max_input_vars = 3000\n…"`).
+
+Baked in for every version: PHP `ftp` and `bcmath` extensions, and an Apache rule that
+refuses the usual AI/SEO crawlers and sends `X-Robots-Tag: noindex` (a private ERP has
+nothing to index).
 
 Everything else is the official image: same `DOLI_*` variables, same volumes
 (`/var/www/documents`, `/var/www/html/custom`), same entrypoint underneath.
