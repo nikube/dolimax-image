@@ -6,6 +6,9 @@
 # DMM-driven module installs and cron key storage.
 CUSTOM=/var/www/html/custom
 DOCS=/var/www/documents
+# docker-run.sh compares DOLI_VERSION with the database version; the base image's
+# value is not ours: the sources come from git (version recorded at build time).
+export DOLI_VERSION="$(cat /etc/dolimax-doli-version)"
 mkdir -p "$CUSTOM"
 # The official image ships custom/ as 555: DMM (and any installer) needs it
 # writable. Not recursive: a bind-mounted module dir belongs to the host user.

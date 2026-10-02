@@ -1,11 +1,12 @@
 # dolimax
 
-`ghcr.io/nikube/dolimax:<tag>` — the official `dolibarr/dolibarr` image, any version,
-made configurable from the environment. One image, three independent axes:
+`ghcr.io/nikube/dolimax:<tag>` — Dolibarr from git (any tag or branch) on the runtime
+of the official `dolibarr/dolibarr` image, made configurable from the environment.
+One image, three independent axes:
 
 | Axis | Where | How |
 |---|---|---|
-| Dolibarr version | image tag | `21.0.4`, `22.0.5`, `23.0.4`, `24.0.0`, majors (`23`), `latest`, `develop` |
+| Dolibarr version | image tag | `21.0.4`, `22.0.5`, `23.0.4`, `24.0.1`, majors (`23`), `latest`, `develop` |
 | Realistic demo company | runtime | `DOLI_INIT_DEMO_REALISTIC=1` (once, lock file in the documents volume) |
 | Custom modules | runtime | `DOLI_EXTRA_MODULES=<spec>,...` installed + activated through DMM on every boot; `DOLI_ACTIVATE_MODULES=modX,modY` for core modules |
 
@@ -24,8 +25,11 @@ Baked in for every version: PHP `ftp` and `bcmath` extensions, and an Apache rul
 refuses the usual AI/SEO crawlers and sends `X-Robots-Tag: noindex` (a private ERP has
 nothing to index).
 
-Everything else is the official image: same `DOLI_*` variables, same volumes
-(`/var/www/documents`, `/var/www/html/custom`), same entrypoint underneath.
+Everything else behaves like the official image: same `DOLI_*` variables, same volumes
+(`/var/www/documents`, `/var/www/html/custom`), same entrypoint underneath. That
+includes upgrades: with `install.lock` in the documents volume the entrypoint never
+migrates by itself, Dolibarr redirects to `/install/` and the wizard (unlocked by a
+`documents/upgrade.unlock` file) walks the majors one by one.
 
 ```bash
 DOLIMAX_TAG=22.0.5 docker compose up -d      # see compose.yml for the full example
@@ -36,16 +40,26 @@ Logs of the one-shot steps: `documents/generate-demo.log`, `documents/activate-m
 
 ## Build
 
-`Dockerfile` overlays three CLI scripts (`install/generate-demo.php` from
-[nikube/dolibarr@feature/demo-data-installer](https://github.com/nikube/dolibarr/tree/feature/demo-data-installer),
-`activate-modules.php`, `set-cron-key.php`), the entrypoint wrapper and DMM
-(`ARG DMM_REF`, tag or branch of nikube/DMM) on `dolibarr/dolibarr:${DOLI_VERSION}`.
-No installer UI patch, so it builds on any tag:
+The Dolibarr sources come from git, not from the official image: `Dockerfile` takes
+PHP, its extensions and `docker-run.sh` from `BASE_IMAGE` (one official tag for every
+ref — its entrypoint does not depend on the Dolibarr version) and replaces the code
+with `DOLI_REF` (tag, branch or commit sha) of `DOLI_REPO`. So a release can be built
+the day it is tagged, without waiting for its official image, and a branch or a fork
+builds the same way:
 
 ```bash
-docker build --build-arg DOLI_VERSION=22.0.5 -t dolimax:22.0.5 .
+docker build --build-arg DOLI_REF=22.0.5 -t dolimax:22.0.5 .
+docker build --build-arg DOLI_REF=22.0 -t dolimax:22.0-head .          # branch head
+docker build --build-arg DOLI_REPO=nikube/dolibarr --build-arg DOLI_REF=nikubepack -t dolimax:develop .
 ```
 
+On top of the sources: three CLI scripts (`install/generate-demo.php` from
+[nikube/dolibarr@feature/demo-data-installer](https://github.com/nikube/dolibarr/tree/feature/demo-data-installer)
+unless the ref ships its own, `activate-modules.php`, `set-cron-key.php`), the
+entrypoint wrapper and DMM (`ARG DMM_REF`, tag or branch of nikube/DMM). No installer
+UI patch. The Dolibarr version is read from the sources at build time and handed to
+`docker-run.sh` by the wrapper.
+
 The workflow builds the matrix, boots each image with demo + DMM as a smoke test,
-then pushes. Add a version: one entry in the matrix. `:develop` comes from
-`Dockerfile.nikubepack` (full tree of `nikube/dolibarr@nikubepack` + DMM baked in).
+then pushes. Add a version: one entry in the matrix. `:develop` is the same
+`Dockerfile` on `nikube/dolibarr@nikubepack`.

@@ -13,16 +13,16 @@ env:
   IMAGE: ghcr.io/nikube/dolimax
 
 jobs:
-  # One image per official Dolibarr tag. Extra tags: major (:23) and :latest
-  # on the newest stable of the matrix.
+  # One image per Dolibarr git tag (sources from git, runtime from the official
+  # image). Extra tags: major (:23) and :latest on the newest stable of the matrix.
   build:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        version: ["21.0.4", "22.0.5", "23.0.4", "24.0.0"]
+        version: ["21.0.4", "22.0.5", "23.0.4", "24.0.1"]
         include:
-          - version: "24.0.0"
+          - version: "24.0.1"
             latest: true
     steps:
       - uses: actions/checkout@v4
@@ -42,7 +42,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          build-args: DOLI_VERSION=${{ matrix.version }}
+          build-args: DOLI_REF=${{ matrix.version }}
           load: true
           tags: ${{ env.IMAGE }}:${{ matrix.version }}
       - name: Smoke test — boot, realistic demo, DMM installs + activation
@@ -63,25 +63,26 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          build-args: DOLI_VERSION=${{ matrix.version }}
+          build-args: DOLI_REF=${{ matrix.version }}
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           labels: |
             org.opencontainers.image.source=https://github.com/nikube/dolimax-image
             org.opencontainers.image.description=Dolibarr ${{ matrix.version }} + realistic demo generator + DOLI_EXTRA_MODULES / DOLI_ACTIVATE_MODULES
 
-  # :develop from nikube/dolibarr@nikubepack (+ DMM baked in), also tagged
-  # with the source short sha — deploy the sha tag to avoid the
-  # "overwritten tag not re-pulled" trap.
+  # :develop from nikube/dolibarr@nikubepack, also tagged with the source short
+  # sha — deploy the sha tag to avoid the "overwritten tag not re-pulled" trap.
+  # Built from the resolved sha so the tag and the content cannot drift apart.
   develop:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Clone sources
+      - name: Resolve source sha
         run: |
-          git clone --depth 1 -b nikubepack https://github.com/nikube/dolibarr.git src/dolibarr
-          git clone --depth 1 -b dev https://github.com/nikube/DMM.git src/DMM
-          echo "sha=$(git -C src/dolibarr rev-parse --short HEAD)" >> "$GITHUB_ENV"
+          sha=$(git ls-remote https://github.com/nikube/dolibarr.git refs/heads/nikubepack | cut -f1)
+          [ -n "$sha" ]
+          echo "sha=$sha" >> "$GITHUB_ENV"
+          echo "short=${sha:0:7}" >> "$GITHUB_ENV"
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -90,11 +91,13 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.nikubepack
+          build-args: |
+            DOLI_REPO=nikube/dolibarr
+            DOLI_REF=${{ env.sha }}
           push: true
           tags: |
             ${{ env.IMAGE }}:develop
-            ${{ env.IMAGE }}:develop-${{ env.sha }}
+            ${{ env.IMAGE }}:develop-${{ env.short }}
           labels: |
             org.opencontainers.image.source=https://github.com/nikube/dolimax-image
             org.opencontainers.image.description=Dolibarr develop (nikubepack branch) + DMM
