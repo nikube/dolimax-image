@@ -21,7 +21,7 @@ FROM ${BASE_IMAGE}
 
 # Dolibarr sources: a tag, a branch or a commit sha of DOLI_REPO.
 ARG DOLI_REPO=Dolibarr/dolibarr
-ARG DOLI_REF=24.0.1
+ARG DOLI_REF=24.0.2
 # Git ref of nikube/DMM to bake (tag or branch). dev until dmm-install.php ships in a release.
 ARG DMM_REF=dev
 

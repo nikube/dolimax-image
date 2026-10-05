@@ -6,7 +6,7 @@ One image, three independent axes:
 
 | Axis | Where | How |
 |---|---|---|
-| Dolibarr version | image tag | `21.0.4`, `22.0.5`, `23.0.4`, `24.0.1`, majors (`23`), `latest`, `develop` |
+| Dolibarr version | image tag | `21.0.4`, `22.0.5`, `23.0.4`, `24.0.2`, majors (`23`), `latest`, `develop` |
 | Realistic demo company | runtime | `DOLI_INIT_DEMO_REALISTIC=1` (once, lock file in the documents volume) |
 | Custom modules | runtime | `DOLI_EXTRA_MODULES=<spec>,...` installed + activated through DMM on every boot; `DOLI_ACTIVATE_MODULES=modX,modY` for core modules |
 

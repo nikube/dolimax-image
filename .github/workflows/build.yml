@@ -20,9 +20,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ["21.0.4", "22.0.5", "23.0.4", "24.0.1"]
+        version: ["21.0.4", "22.0.5", "23.0.4", "24.0.2"]
         include:
-          - version: "24.0.1"
+          - version: "24.0.2"
             latest: true
     steps:
       - uses: actions/checkout@v4
