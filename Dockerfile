@@ -16,7 +16,7 @@
 # Runtime only (PHP, extensions, docker-run.sh): the official entrypoint is the same
 # file on every published tag and 20+ all run PHP 8.2, so one base serves every ref.
 # ponytail: single base; make it a per-ref build arg in CI if a major needs another PHP.
-ARG BASE_IMAGE=dolibarr/dolibarr:24.0.0
+ARG BASE_IMAGE=dolibarr/dolibarr:24.0.2
 FROM ${BASE_IMAGE}
 
 # Dolibarr sources: a tag, a branch or a commit sha of DOLI_REPO.
