@@ -28,6 +28,9 @@ ARG DMM_REF=dev
 USER root
 # ftp: Dolibarr FTP module + EDI/backup flows; bcmath: several modules assume it.
 RUN docker-php-ext-install ftp bcmath
+# poppler-utils (pdftotext): PortalReturn reads the customers' return forms with it; shell_exec is disabled
+# in this image but exec() is not, which is what the module uses.
+RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils && rm -rf /var/lib/apt/lists/*
 
 # Private ERP: nothing to index. Refuse the usual AI/SEO crawlers and tell the rest not to index.
 COPY block-bots.conf /etc/apache2/conf-enabled/block-bots.conf
