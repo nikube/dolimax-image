@@ -37,6 +37,9 @@ COPY block-bots.conf /etc/apache2/conf-enabled/block-bots.conf
 RUN a2enmod headers
 
 COPY generate-demo.php activate-modules.php set-cron-key.php /opt/dolimax-install/
+# Backports of upstream fixes (see each file's header), applied when they fit the ref and skipped otherwise
+# (older code, or already merged upstream as on develop).
+COPY patches/ /opt/dolimax-patches/
 
 # Replace the base image's Dolibarr with the requested ref (custom/ stays: it is a volume).
 # The version is read from the sources and handed to docker-run.sh by the wrapper,
@@ -45,6 +48,15 @@ RUN <<'EOF'
 set -eux
 mkdir /tmp/src /tmp/dmm
 curl -fsSL "https://codeload.github.com/${DOLI_REPO}/tar.gz/${DOLI_REF}" | tar -xz -C /tmp/src --strip-components=1
+for p in /opt/dolimax-patches/*.patch; do
+	if patch -p1 -d /tmp/src --forward --dry-run -s < "$p" > /dev/null 2>&1; then
+		patch -p1 -d /tmp/src --forward -s < "$p"
+		echo "dolimax patch applied: $(basename "$p")" | tee -a /etc/dolimax-patches
+	else
+		echo "dolimax patch skipped: $(basename "$p")"
+	fi
+done
+touch /etc/dolimax-patches
 chmod -R u+w /var/www/html
 find /var/www/html -mindepth 1 -maxdepth 1 ! -name custom -exec rm -rf {} +
 cp -r /tmp/src/htdocs/. /var/www/html/
@@ -65,7 +77,7 @@ mv /tmp/dmm/dolimodulemanager /opt/extra-custom/dolimodulemanager
 
 chown -R www-data:www-data /var/www/html /var/www/scripts /opt/extra-custom
 chmod -R u-w /var/www/html
-rm -rf /tmp/src /tmp/dmm /opt/dolimax-install
+rm -rf /tmp/src /tmp/dmm /opt/dolimax-install /opt/dolimax-patches
 EOF
 
 COPY docker-dolimax.sh /usr/local/bin/docker-dolimax.sh

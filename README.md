@@ -60,6 +60,14 @@ entrypoint wrapper and DMM (`ARG DMM_REF`, tag or branch of nikube/DMM). No inst
 UI patch. The Dolibarr version is read from the sources at build time and handed to
 `docker-run.sh` by the wrapper.
 
+Backports of upstream fixes live in `patches/` (each file says what it brings and for
+which versions). They are applied to the sources when they fit the ref and skipped
+otherwise (older code, or already merged as on `develop`); the image lists the applied
+ones in `/etc/dolimax-patches`. Current one: `outstanding-bills-pr41280.patch`, the
+outstanding amount of a thirdparty in SQL (a customer with thousands of opened invoices
+had a 15-30 s card), off by default as upstream: set `MAIN_PERF_CALCULATE_OUTSTANDING_BILLS_BY_DB`
+to 1 (Setup > Other setup) to use it.
+
 The workflow builds the matrix, boots each image with demo + DMM as a smoke test,
 then pushes. Add a version: one entry in the matrix. `:develop` is the same
 `Dockerfile` on `nikube/dolibarr@nikubepack`.
