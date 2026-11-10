@@ -37,18 +37,29 @@ ACTIVATE="$DOLI_ACTIVATE_MODULES"
 if [ -n "$DOLI_EXTRA_MODULES" ] && [[ ",$ACTIVATE," != *,modDoliModuleManager,* ]]; then
 	ACTIVATE="modDoliModuleManager${ACTIVATE:+,$ACTIVATE}"
 fi
+# The PHP scripts read their input from the environment (su keeps it): no value
+# is pasted into a shell string, so a quote in a key or a login cannot break it.
+export DOLI_ACTIVATE_MODULES="$ACTIVATE"
 
 if [ "${DOLI_INIT_DEMO_REALISTIC:-0}" = "1" ] || [ -n "$ACTIVATE" ] || [ -n "$DOLI_CRON_KEY" ]; then
 	(
 		until curl -fsS -o /dev/null http://127.0.0.1:80/ 2>/dev/null; do sleep 5; done
 		as_www() { su www-data -s /bin/sh -c "$1"; }
 
+		# install.lock + older database: docker-run.sh does not migrate, Dolibarr sends
+		# everyone to /install/. Do not activate or install modules on the old schema.
+		# ponytail: major.minor compared as a float, fine while minors stay 0 (true since 5.0).
+		if ! as_www 'php -r "require \"/var/www/html/master.inc.php\"; \$v = getDolGlobalString(\"MAIN_VERSION_LAST_UPGRADE\") ?: getDolGlobalString(\"MAIN_VERSION_LAST_INSTALL\"); exit((int) ((float) \$v < (float) DOL_VERSION));"'; then
+			echo "[dolimax] database older than the files ($DOLI_VERSION) or not installed: post-install steps skipped, upgrade through /install/ then restart"
+			exit 0
+		fi
+
 		if [ "${DOLI_INIT_DEMO_REALISTIC:-0}" = "1" ]; then
 			LOCK=$DOCS/install.demo-realistic.done
 			LOG=$DOCS/generate-demo.log
 			if [ -e "$LOCK" ]; then
 				echo "[dolimax] demo lock present, skipping generation"
-			elif as_www "php /var/www/html/install/generate-demo.php '${DOLI_ADMIN_LOGIN:-admin}'" >> "$LOG" 2>&1; then
+			elif as_www "php /var/www/html/install/generate-demo.php" >> "$LOG" 2>&1; then
 				touch "$LOCK"; chown www-data:www-data "$LOCK" "$LOG"
 				echo "[dolimax] realistic demo data generated successfully"
 			else
@@ -58,7 +69,7 @@ if [ "${DOLI_INIT_DEMO_REALISTIC:-0}" = "1" ] || [ -n "$ACTIVATE" ] || [ -n "$DO
 
 		if [ -n "$ACTIVATE" ]; then
 			MLOG=$DOCS/activate-modules.log
-			if as_www "php /var/www/html/install/activate-modules.php '$ACTIVATE'" >> "$MLOG" 2>&1; then
+			if as_www "php /var/www/html/install/activate-modules.php" >> "$MLOG" 2>&1; then
 				echo "[dolimax] modules activated: $ACTIVATE"
 			else
 				echo "[dolimax] ERROR: module activation failed — see $MLOG"
@@ -66,7 +77,7 @@ if [ "${DOLI_INIT_DEMO_REALISTIC:-0}" = "1" ] || [ -n "$ACTIVATE" ] || [ -n "$DO
 		fi
 
 		# Install + activate through DMM (registry row, release resolution, backup).
-		# Idempotent: an already installed module is re-deployed at the same version.
+		# Idempotent: a module already at the wanted version is only re-activated.
 		if [ -n "$DOLI_EXTRA_MODULES" ]; then
 			ILOG=$DOCS/dmm-install.log
 			if as_www "php $CUSTOM/dolimodulemanager/scripts/dmm-install.php --activate ${DOLI_GITHUB_TOKEN:+--token=$DOLI_GITHUB_TOKEN} ${DOLI_EXTRA_MODULES//,/ }" >> "$ILOG" 2>&1; then
@@ -79,7 +90,7 @@ if [ "${DOLI_INIT_DEMO_REALISTIC:-0}" = "1" ] || [ -n "$ACTIVATE" ] || [ -n "$DO
 		# docker-run.sh writes CRON_KEY before modCron exists on a fresh install,
 		# so the row is missing; store it ourselves (idempotent).
 		if [ -n "$DOLI_CRON_KEY" ]; then
-			as_www "php /var/www/html/install/set-cron-key.php '$DOLI_CRON_KEY'" \
+			as_www "php /var/www/html/install/set-cron-key.php" \
 				&& echo "[dolimax] CRON_KEY stored" || echo "[dolimax] ERROR: could not store CRON_KEY"
 		fi
 	) &

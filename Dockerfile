@@ -15,15 +15,16 @@
 
 # Runtime only (PHP, extensions, docker-run.sh): the official entrypoint is the same
 # file on every published tag and 20+ all run PHP 8.2, so one base serves every ref.
+# Pinned to the -php8.2 variant: the plain tag follows the newest PHP (8.5 since 2026-11-07).
 # ponytail: single base; make it a per-ref build arg in CI if a major needs another PHP.
-ARG BASE_IMAGE=dolibarr/dolibarr:24.0.2
+ARG BASE_IMAGE=dolibarr/dolibarr:24.0.2-php8.2
 FROM ${BASE_IMAGE}
 
 # Dolibarr sources: a tag, a branch or a commit sha of DOLI_REPO.
 ARG DOLI_REPO=Dolibarr/dolibarr
-ARG DOLI_REF=24.0.2
-# Git ref of nikube/DMM to bake (tag or branch). dev until dmm-install.php ships in a release.
-ARG DMM_REF=dev
+ARG DOLI_REF=24.0.3
+# Git ref of nikube/DMM to bake (tag or branch): a release tag, bumped with each DMM release.
+ARG DMM_REF=v2.2.5
 
 USER root
 # ftp: Dolibarr FTP module + EDI/backup flows; bcmath: several modules assume it.

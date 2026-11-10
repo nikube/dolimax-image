@@ -15,15 +15,22 @@ env:
 jobs:
   # One image per Dolibarr git tag (sources from git, runtime from the official
   # image). Extra tags: major (:23) and :latest on the newest stable of the matrix.
+  # :develop is the head of a branch (nikube/dolibarr@nikubepack), built from the
+  # resolved sha so the tag and the content cannot drift apart, and also tagged
+  # :develop-<short sha> — deploy that one to avoid the "overwritten tag not
+  # re-pulled" trap.
   build:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        version: ["21.0.4", "22.0.5", "23.0.4", "24.0.2"]
+        version: ["21.0.4", "22.0.5", "23.0.4", "24.0.3"]
         include:
-          - version: "24.0.2"
+          - version: "24.0.3"
             latest: true
+          - version: develop
+            repo: nikube/dolibarr
+            branch: nikubepack
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
@@ -31,18 +38,31 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Tags
-        id: tags
+      - name: Source ref and tags
+        id: src
         run: |
           v=${{ matrix.version }}
-          t="$IMAGE:$v,$IMAGE:${v%%.*}"
-          [ "${{ matrix.latest }}" = "true" ] && t="$t,$IMAGE:latest"
+          repo=${{ matrix.repo || 'Dolibarr/dolibarr' }}
+          ref=$v
+          t="$IMAGE:$v"
+          if [ -n "${{ matrix.branch }}" ]; then
+            ref=$(git ls-remote "https://github.com/$repo.git" "refs/heads/${{ matrix.branch }}" | cut -f1)
+            [ -n "$ref" ]
+            t="$t,$IMAGE:$v-${ref:0:7}"
+          else
+            t="$t,$IMAGE:${v%%.*}"
+          fi
+          if [ "${{ matrix.latest }}" = "true" ]; then t="$t,$IMAGE:latest"; fi
+          echo "repo=$repo" >> "$GITHUB_OUTPUT"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "tags=$t" >> "$GITHUB_OUTPUT"
       - name: Build (local)
         uses: docker/build-push-action@v6
         with:
           context: .
-          build-args: DOLI_REF=${{ matrix.version }}
+          build-args: |
+            DOLI_REPO=${{ steps.src.outputs.repo }}
+            DOLI_REF=${{ steps.src.outputs.ref }}
           load: true
           tags: ${{ env.IMAGE }}:${{ matrix.version }}
       - name: Smoke test — boot, realistic demo, DMM installs + activation
@@ -63,41 +83,11 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          build-args: DOLI_REF=${{ matrix.version }}
+          build-args: |
+            DOLI_REPO=${{ steps.src.outputs.repo }}
+            DOLI_REF=${{ steps.src.outputs.ref }}
           push: true
-          tags: ${{ steps.tags.outputs.tags }}
+          tags: ${{ steps.src.outputs.tags }}
           labels: |
             org.opencontainers.image.source=https://github.com/nikube/dolimax-image
             org.opencontainers.image.description=Dolibarr ${{ matrix.version }} + realistic demo generator + DOLI_EXTRA_MODULES / DOLI_ACTIVATE_MODULES
-
-  # :develop from nikube/dolibarr@nikubepack, also tagged with the source short
-  # sha — deploy the sha tag to avoid the "overwritten tag not re-pulled" trap.
-  # Built from the resolved sha so the tag and the content cannot drift apart.
-  develop:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Resolve source sha
-        run: |
-          sha=$(git ls-remote https://github.com/nikube/dolibarr.git refs/heads/nikubepack | cut -f1)
-          [ -n "$sha" ]
-          echo "sha=$sha" >> "$GITHUB_ENV"
-          echo "short=${sha:0:7}" >> "$GITHUB_ENV"
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          build-args: |
-            DOLI_REPO=nikube/dolibarr
-            DOLI_REF=${{ env.sha }}
-          push: true
-          tags: |
-            ${{ env.IMAGE }}:develop
-            ${{ env.IMAGE }}:develop-${{ env.short }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/nikube/dolimax-image
-            org.opencontainers.image.description=Dolibarr develop (nikubepack branch) + DMM
