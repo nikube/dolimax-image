@@ -24,7 +24,7 @@ FROM ${BASE_IMAGE}
 ARG DOLI_REPO=Dolibarr/dolibarr
 ARG DOLI_REF=24.0.3
 # Git ref of nikube/DMM to bake (tag or branch): a release tag, bumped with each DMM release.
-ARG DMM_REF=v2.3.0
+ARG DMM_REF=v2.3.1
 
 USER root
 # ftp: Dolibarr FTP module + EDI/backup flows; bcmath: several modules assume it.

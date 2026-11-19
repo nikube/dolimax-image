@@ -80,7 +80,7 @@ if [ "${DOLI_INIT_DEMO_REALISTIC:-0}" = "1" ] || [ -n "$ACTIVATE" ] || [ -n "$DO
 		# Idempotent: a module already at the wanted version is only re-activated.
 		if [ -n "$DOLI_EXTRA_MODULES" ]; then
 			ILOG=$DOCS/dmm-install.log
-			if as_www "php $CUSTOM/dolimodulemanager/scripts/dmm-install.php --activate ${DOLI_GITHUB_TOKEN:+--token=$DOLI_GITHUB_TOKEN} ${DOLI_EXTRA_MODULES//,/ }" >> "$ILOG" 2>&1; then
+			if as_www "php $CUSTOM/dolimodulemanager/scripts/dmm-install.php --activate ${DOLI_GITHUB_TOKEN:+--token=$DOLI_GITHUB_TOKEN} ${DOLI_DMM_LICENCE:+--licence=$DOLI_DMM_LICENCE} ${DOLI_EXTRA_MODULES//,/ }" >> "$ILOG" 2>&1; then
 				echo "[dolimax] extra modules installed: $DOLI_EXTRA_MODULES"
 			else
 				echo "[dolimax] ERROR: some extra modules failed — see $ILOG"

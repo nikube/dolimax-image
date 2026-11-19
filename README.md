@@ -17,7 +17,8 @@ the latest release compatible with the running Dolibarr is picked, so a module w
 `dmm.json` caps at an older major is refused unless forced. `DOLI_GITHUB_TOKEN` unlocks
 private repos. Modules already at the wanted version are only re-activated. On a
 production instance pin every spec (`multifilter@v1.2.0`): an unpinned one moves to the
-newest compatible release at the next container restart.
+newest compatible release at the next container restart. `DOLI_DMM_LICENCE=https://licence-server,dmx_key` registers a dmmback licence first, so licensed modules
+can be listed as `https://licence-server/<module_id>` without any GitHub token in the container.
 
 Plus `DOLI_CRON_KEY` stored as `CRON_KEY` (the official entrypoint writes it before
 modCron exists, so the row is missing on a fresh install), and `DOLI_PHP_INI` for
