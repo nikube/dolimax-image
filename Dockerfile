@@ -37,6 +37,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils &
 COPY block-bots.conf /etc/apache2/conf-enabled/block-bots.conf
 RUN a2enmod headers
 
+# A Dolibarr page asks for ~30 files at once and each connection holds a prefork worker.
+# With the default pool (5 spare), the first page after a quiet period waits ~4 s while
+# Apache forks one worker after the other; measured 0.9 s with 30 spare (~110 MB in all).
+RUN sed -i -E 's/^(\s*StartServers\s+).*/\130/; s/^(\s*MinSpareServers\s+).*/\130/; s/^(\s*MaxSpareServers\s+).*/\140/' /etc/apache2/mods-available/mpm_prefork.conf \
+ && grep -qE '^\s*MinSpareServers\s+30$' /etc/apache2/mods-available/mpm_prefork.conf && apache2ctl -t
+
 COPY generate-demo.php activate-modules.php set-cron-key.php /opt/dolimax-install/
 # Backports of upstream fixes (see each file's header), applied when they fit the ref and skipped otherwise
 # (older code, or already merged upstream as on develop).
