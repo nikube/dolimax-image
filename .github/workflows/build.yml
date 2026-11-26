@@ -24,9 +24,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ["21.0.4", "22.0.5", "23.0.4", "24.0.3"]
+        version: ["21.0.4", "22.0.5", "23.0.4", "24.0.4"]
         include:
-          - version: "24.0.3"
+          - version: "24.0.4"
             latest: true
           - version: develop
             repo: nikube/dolibarr
